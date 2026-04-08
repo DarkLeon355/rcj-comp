@@ -3,74 +3,74 @@ import subprocess
 import RPi.GPIO as GPIO
 import time
 import signal
+import sys
 
 BUTTON_PIN = 26
-SCRIPT_ON = "led_on.sh"
-SCRIPT_OFF = "led_off.sh"
-PYTHON_SCRIPT = "main.py"
-DOUBLE_PRESS_WINDOW = 0.6
+# Ensure we have absolute paths
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_ON = os.path.join(BASE_DIR, "led_on.sh")
+SCRIPT_OFF = os.path.join(BASE_DIR, "led_off.sh")
+PYTHON_SCRIPT = os.path.join(BASE_DIR, "main.py")
 
-def handle_one_press(led_state):
-    if led_state == "off":
-        script_path = os.path.join(os.path.dirname(__file__), SCRIPT_ON)
-    else:
-        script_path = os.path.join(os.path.dirname(__file__), SCRIPT_OFF)
-    subprocess.run(["sudo", "/bin/bash", script_path], check=True)
+def handle_led(state):
+    script = SCRIPT_ON if state == "on" else SCRIPT_OFF
+    try:
+        # Use Popen to keep it non-blocking if needed, 
+        # or stick to run if the scripts are near-instant.
+        subprocess.run(["sudo", "/bin/bash", script], check=True)
+    except Exception:
+        pass
 
-def start_python_program():
-    script_path = os.path.join(os.path.dirname(__file__), PYTHON_SCRIPT)
-    return subprocess.Popen(["python3", script_path])
 
-def stop_python_program(proc):
-    # Send SIGINT so main.py can run its KeyboardInterrupt/finally cleanup path.
-    proc.send_signal(signal.SIGINT)
-    proc.wait()
+def wait_for_button_press():
+    try:
+        GPIO.wait_for_edge(BUTTON_PIN, GPIO.FALLING, bouncetime=250)
+        return True
+    except RuntimeError:
+        # Fallback for environments where edge interrupts are unavailable.
+        while GPIO.input(BUTTON_PIN) == GPIO.HIGH:
+            time.sleep(0.01)
+        time.sleep(0.05)
+        return GPIO.input(BUTTON_PIN) == GPIO.LOW
 
 def main():
+    GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
+    # Added PUD_UP and pull_up_down logic
     GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
     led_state = "off"
     python_proc = None
-    pending_single_press_at = None
 
-    print("Warte auf klick an GPIO 26")
     try:
         while True:
-            now = time.time()
+            if not wait_for_button_press():
+                continue
 
-            if GPIO.input(BUTTON_PIN) == GPIO.LOW:
-                while GPIO.input(BUTTON_PIN) == GPIO.LOW:
-                    time.sleep(0.01)
-                print("Kurzer klick erkannt")
+            if python_proc and python_proc.poll() is None:
+                led_state = "off"
+                handle_led(led_state)
+                python_proc.send_signal(signal.SIGINT)
+                try:
+                    python_proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    python_proc.terminate()
+                    python_proc.wait(timeout=5)
+                python_proc = None
+            else:
+                led_state = "on"
+                handle_led(led_state)
+                python_proc = subprocess.Popen([sys.executable, PYTHON_SCRIPT])
 
-                if pending_single_press_at is not None and now - pending_single_press_at <= DOUBLE_PRESS_WINDOW:
-                    if python_proc and python_proc.poll() is None:
-                        print("Doppelklick beende Python Programm")
-                        stop_python_program(python_proc)
-                        python_proc = None
-                    else:
-                        print("Doppelklick starte Python Programm")
-                        python_proc = start_python_program()
-                    pending_single_press_at = None
-                else:
-                    pending_single_press_at = now
-
+            # Wait for button release to avoid immediate re-triggering
+            while GPIO.input(BUTTON_PIN) == GPIO.LOW:
                 time.sleep(0.1)
 
-            if pending_single_press_at is not None and now - pending_single_press_at > DOUBLE_PRESS_WINDOW:
-                print("Einzelklick bestätigt")
-                handle_one_press(led_state)
-                led_state = "on" if led_state == "off" else "off"
-                pending_single_press_at = None
-
-            time.sleep(0.01)
     except KeyboardInterrupt:
         pass
     finally:
         if python_proc and python_proc.poll() is None:
-            stop_python_program(python_proc)
-
+            python_proc.terminate()
         GPIO.cleanup()
 
 if __name__ == "__main__":
