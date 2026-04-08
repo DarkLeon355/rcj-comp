@@ -45,7 +45,7 @@ class LineFollow:
 
 
         #─────────────────────────────────────────────────────────────
-        # DEBUGGING:
+        # DEBUGGING: test
         #─────────────────────────────────────────────────────────────
         # debug options, be aware the picture can be very ugly if you enable too many
         self.debug_draw_raw_green = False  # draw unmerged green contours
