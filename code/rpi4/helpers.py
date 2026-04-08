@@ -89,7 +89,7 @@ class Helpers:
                     skip_frame_flag = True
                     self.motor.turn_around180()
                     self.motor.forward(50)  # Move forward a bit after turning
-                    time.sleep(0.25)
+                    time.sleep(0.75)
                     self.iterations_since_last_turn = 0    
 
                 if len(filtered_dots) == 1 and cx_list and cy_list and junction_center is not None:
@@ -105,13 +105,13 @@ class Helpers:
                     if cx_green < cx_at_green:
                         self.motor.left90()
                         self.motor.forward(50)  # Move forward a bit after turning
-                        time.sleep(0.25)
+                        time.sleep(0.5)
                         self.iterations_since_last_turn = 0
                        
                     elif cx_green > cx_at_green:
                         self.motor.right90()
                         self.motor.forward(50)  # Move forward a bit after turning
-                        time.sleep(0.25)
+                        time.sleep(0.5)
                         self.iterations_since_last_turn = 0
                       
 

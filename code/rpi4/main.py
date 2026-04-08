@@ -92,10 +92,10 @@ class LineFollow:
         self.long_kernel_parameter_junction = 400 # this is the parameter for horizontal and vertical kernel, for junction detection
 
         #Motor speeds (dont go below 30)
-        self.base_speed_original = 40  # Standartgeschwindigkeit -> Achtung zu hohe Geschwindkeit kann Fehler im Linefollowing verursachen, may get changed due to incline or decline
+        self.base_speed_original = 45  # Standartgeschwindigkeit -> Achtung zu hohe Geschwindkeit kann Fehler im Linefollowing verursachen, may get changed due to incline or decline
         self.junction_speed = 35 # Speed detecting a junction 
         self.max_speed = 100   # Der maximale Speed
-        self.min_turn_speed = 50 # Die Geschwindgkeit mit der drehungen mindestens gefahren werden, should be at least 60
+        self.min_turn_speed = 60 # Die Geschwindgkeit mit der drehungen mindestens gefahren werden, should be at least 60
         self.max_turn_speed = 100 # adjust in case of overturning
         self.obstacle_approach_speed = 30 # reduced speed when approaching obstacle
         self.decline_speed = 30 # speed when going down an incline
@@ -110,7 +110,7 @@ class LineFollow:
 
         #steering parameters
         self.K_angle = 3 # Einfluss des Winkels auf die Motoransteuerung
-        self.K_offset = 0.3 # Einfluss des offset auf die Motoransteuerung
+        self.K_offset = 0.5 # Einfluss des offset auf die Motoransteuerung
         self.deadzone_base = 20 # Deadzone for steering control, also Forward() solange unter self.deadzone
         self.min_points = 5 # minimum amout of points, if below it goes forward
 
@@ -540,12 +540,14 @@ class LineFollow:
             if abs(steering) < active_deadzone:  
                 self.motor.forward(base_speed)
             else:
-                # Differential steering: keep both wheels forward for smooth arc turns.
+                # Differential steering: split steering across both wheels (pivot-style).
                 steer_mag = abs(steering)
-                outer_speed = int(min(max(base_speed + steer_mag, self.min_turn_speed), self.max_turn_speed))
-                min_inner_speed = max(20, int(self.min_turn_speed * 0.5))
-                inner_target = base_speed - steer_mag * self.inner_reduction_ratio
-                inner_speed = int(min(max(inner_target, min_inner_speed), self.max_turn_speed))
+                outer_speed = int(max(self.min_turn_speed + steer_mag, self.min_turn_speed))
+                inner_speed = int(min((-self.min_turn_speed - steer_mag * self.inner_reduction_ratio), -self.min_turn_speed))
+
+                if abs(outer_speed) > self.max_turn_speed or abs(inner_speed) > self.max_turn_speed:
+                    inner_speed = -self.max_turn_speed
+                    outer_speed = self.max_turn_speed
 
 
                 if steering > 0:
