@@ -40,7 +40,7 @@ class Helpers:
 
         #Parameters for y_level generation
         self.bottom_fraction=0.3
-        self.bottom_margin=50
+        self.bottom_margin=100
         self.y_levels_amount = 10
 
         #Parameters for dot merging
@@ -221,7 +221,7 @@ class Helpers:
         end = int(height * self.bottom_fraction)
 
         t = np.linspace(1, 0.0, self.y_levels_amount)  # start from bottom (t=1) to top (t=0)
-        bias_power = 1  # <1 → more bottom emphasis, close to 1 keeps it gentle
+        bias_power = 1.5  # <1 → more bottom emphasis, close to 1 keeps it gentle
         weights = np.power(t, bias_power)
 
         y_float = end + weights * (start - end)

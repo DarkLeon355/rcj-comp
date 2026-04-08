@@ -25,7 +25,7 @@ class Motors:
         self.ENB = 13  # PWM for motor 2
 
         # pwm frequency in Hz
-        self.pwm_freq = 1000
+        self.pwm_freq = 5000
 
         # Gyro parameters
         self.GYRO_THRESHOLD = 2  # degrees/sec, ignore small jitter

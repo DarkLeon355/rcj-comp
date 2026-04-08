@@ -92,8 +92,8 @@ class LineFollow:
         self.long_kernel_parameter_junction = 400 # this is the parameter for horizontal and vertical kernel, for junction detection
 
         #Motor speeds (dont go below 30)
-        self.base_speed_original = 35  # Standartgeschwindigkeit -> Achtung zu hohe Geschwindkeit kann Fehler im Linefollowing verursachen, may get changed due to incline or decline
-        self.junction_speed = 25 # Speed detecting a junction 
+        self.base_speed_original = 40  # Standartgeschwindigkeit -> Achtung zu hohe Geschwindkeit kann Fehler im Linefollowing verursachen, may get changed due to incline or decline
+        self.junction_speed = 35 # Speed detecting a junction 
         self.max_speed = 100   # Der maximale Speed
         self.min_turn_speed = 50 # Die Geschwindgkeit mit der drehungen mindestens gefahren werden, should be at least 60
         self.max_turn_speed = 100 # adjust in case of overturning
@@ -109,8 +109,8 @@ class LineFollow:
         self.right = 250    # Significant side cropping (scaled to new resolution)
 
         #steering parameters
-        self.K_angle = 4.5 / 1.05 # Einfluss des Winkels auf die Motoransteuerung
-        self.K_offset = 0.45 / 1.05 # Einfluss des offset auf die Motoransteuerung
+        self.K_angle = 3 # Einfluss des Winkels auf die Motoransteuerung
+        self.K_offset = 0.3 # Einfluss des offset auf die Motoransteuerung
         self.deadzone_base = 20 # Deadzone for steering control, also Forward() solange unter self.deadzone
         self.min_points = 5 # minimum amout of points, if below it goes forward
 
@@ -310,6 +310,8 @@ class LineFollow:
         self.cx_list.clear()
         self.cy_list.clear()
         self.large_contours.clear()
+        prev = None
+        max_dist_btw_cx = self.cropped_width/3
 
         for y in self.y_levels:
             cx = None
@@ -328,6 +330,12 @@ class LineFollow:
                         if M["m00"] != 0:
                             cx = int(M["m10"] / M["m00"])
                             cy = int(M["m01"] / M["m00"]) + y_start
+                            if prev is not None and abs(cx - prev) > max_dist_btw_cx:
+                                cx = prev
+                            # Keep tracking from the last accepted centroid to avoid stale comparisons.
+                            prev = cx
+                        
+
                             if self.debug_draw_areas and cx is not None and cy is not None:
                                 area = cv2.contourArea(cnt)
                                 cv2.putText(
@@ -517,7 +525,7 @@ class LineFollow:
         if self.cx_list:
         
             frame_center_x = self.cropped_width // 2
-            avg_offset = np.mean(self.cx_list) - frame_center_x
+            avg_offset = np.median(self.cx_list) - frame_center_x
 
             steering = (K_angle * self.angle_deg) + K_offset * avg_offset
             
@@ -532,10 +540,13 @@ class LineFollow:
             if abs(steering) < active_deadzone:  
                 self.motor.forward(base_speed)
             else:
-                # Differential steering: split steering across both wheels
-                steer_mag = min(abs(steering), self.max_turn_speed)
-                outer_speed = int(max(self.min_turn_speed + steer_mag, self.min_turn_speed))
-                inner_speed = int(min((-self.min_turn_speed - steer_mag * self.inner_reduction_ratio), -self.min_turn_speed)) 
+                # Differential steering: keep both wheels forward for smooth arc turns.
+                steer_mag = abs(steering)
+                outer_speed = int(min(max(base_speed + steer_mag, self.min_turn_speed), self.max_turn_speed))
+                min_inner_speed = max(20, int(self.min_turn_speed * 0.5))
+                inner_target = base_speed - steer_mag * self.inner_reduction_ratio
+                inner_speed = int(min(max(inner_target, min_inner_speed), self.max_turn_speed))
+
 
                 if steering > 0:
                     # Turn right: slow right wheel
@@ -640,6 +651,7 @@ if __name__ == "__main__":
     try:
         while True:
             line_follower.process_frame()
+            time.sleep(0.05)
     except KeyboardInterrupt:
         print("Interrupted by user")
     finally:
