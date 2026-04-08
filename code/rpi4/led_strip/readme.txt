@@ -1,0 +1,1 @@
+These are files for controlling the led strips. Make sure to run them in a seperate virtual environment.

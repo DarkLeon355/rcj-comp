@@ -1,0 +1,24 @@
+led_strip dependency guide (make sure to run in virtual environment)
+
+Target platform:
+- Raspberry Pi OS (Bookworm/Bullseye)
+- Python 3
+
+Required Python modules used in this folder:
+- board
+- neopixel
+
+Recommended install (on Raspberry Pi):
+
+sudo apt update
+sudo apt install -y python3-pip python3-dev
+python3 -m pip install adafruit-blinka adafruit-circuitpython-neopixel
+
+Notes:
+- `board` is provided by `adafruit-blinka`.
+- `neopixel` is provided by `adafruit-circuitpython-neopixel`.
+- These scripts are intended to run on Raspberry Pi hardware (GPIO pin `D18`).
+
+Quick verification command:
+
+python3 -c "import board, neopixel; print('LED strip deps OK')"

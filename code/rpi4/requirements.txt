@@ -1,0 +1,22 @@
+# Requirements for ALL code/rpi4 programs EXCEPT code/rpi4/led_strip
+# Covered folders include:
+# - main runtime (main.py, motors.py, obstacle.py, helpers.py, gyroscope.py, HC_SR04.py, save_img.py, pc_stream_viewer.py, button.py)
+# - victim_rescue/
+# - test_progs/
+# - doc_progs/
+#
+# Install with:
+#   python3 -m pip install -r code/rpi4/requirements.txt
+
+numpy>=1.24
+opencv-python>=4.8
+
+# Raspberry Pi runtime modules used by the programs above:
+# Note: On Raspberry Pi OS, these are usually more reliable via apt.
+picamera2
+RPi.GPIO
+smbus
+
+# Recommended apt alternative on Raspberry Pi OS:
+# sudo apt update
+# sudo apt install -y python3-numpy python3-opencv python3-picamera2 python3-rpi.gpio python3-smbus i2c-tools
