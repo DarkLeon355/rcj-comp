@@ -27,7 +27,7 @@ class Helpers:
         #Parameters for junction processing
         self.iterations_since_last_turn = 20
         self.min_iterations_btw_turns = 30
-        self.center_tolerance_y = 90
+        self.center_tolerance_y = 70
         self.center_tolerance_x = 200
 
         #Parameters for obstacle approaching
@@ -36,7 +36,7 @@ class Helpers:
 
         #Parameters for x rotation smoothing
         self.x_rot_buffer = []       # rolling buffer for incline smoothing
-        self.x_rot_buffer_size = 5  # average over last 10 readings
+        self.x_rot_buffer_size = 2
 
         #Parameters for y_level generation
         self.bottom_fraction=0.3
@@ -44,11 +44,11 @@ class Helpers:
         self.y_levels_amount = 10
 
         #Parameters for dot merging
-        self.max_dist = 300
+        self.max_dist = 200
 
         #Parameters for branch checking
         self.branch_window = 50  
-        self.branch_min_win_pixels = 750
+        self.branch_min_win_pixels = 1000
         #─────────────────────────────────────────────────────────────
         
 

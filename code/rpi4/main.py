@@ -11,6 +11,7 @@ import motors
 import gyroscope 
 import obstacle
 import helpers
+import random
 
 
 class LineFollow:
@@ -39,16 +40,17 @@ class LineFollow:
         #variable initialization
         self.angle_deg = 0.0
         self.neigung = 0
-        self.framecount = 0
+        self.framecount = random.randint(1,10000000)
         self.junction_bbox = None # Bounding box einer Kreuzung (x, y, w, h) wenn vorhanden
         self.junction_center = None
+        self.iterations_since_incline = 0
 
 
         #─────────────────────────────────────────────────────────────
         # DEBUGGING: test
         #─────────────────────────────────────────────────────────────
         # debug options, be aware the picture can be very ugly if you enable too many
-        self.debug_draw_raw_green = False  # draw unmerged green contours
+        self.debug_draw_raw_green = True  # draw unmerged green contours
         self.debug_draw_junction_center = True # draws the junction center if found
         self.debug_draw_filtered_green_dots = True # draw merged green dots
         self.debug_draw_line_centroids = True # draw line centroids
@@ -56,26 +58,26 @@ class LineFollow:
         self.debug_draw_centroid_offsets = True # draw distance from centroids to frame center
         self.debug_draw_connected_centroids = True  # draw lines connecting centroids
         self.save_pics = True # save pics locally
-        self.stream_to_pc = True # stream pics via socket
+        self.stream_to_pc = False # stream pics via socket
 
 
         #─────────────────────────────────────────────────────────────
         # PARAMETERS:
         #─────────────────────────────────────────────────────────────
         # green dot parameters:
-        self.MIN_GREEN_DOT_AREA = 100 #minimale fläche die ein grüner punkt haben muss (scaled for 1280x960)
+        self.MIN_GREEN_DOT_AREA = 300 #minimale fläche die ein grüner punkt haben muss (scaled for 1280x960)
         # green ranges(HSV): 
         # Range A: gelb-grün
-        self.lower_green_a = np.array([20, 40, 20])
-        self.upper_green_a = np.array([50, 255, 255])
+        self.lower_green_a = np.array([18, 35, 15])
+        self.upper_green_a = np.array([55, 255, 255])
         # Range B: grün-türkis
-        self.lower_green_b = np.array([50, 30, 20])
-        self.upper_green_b = np.array([110, 255, 255])
+        self.lower_green_b = np.array([45, 25, 15])
+        self.upper_green_b = np.array([120, 255, 255])
 
         # parameters for line detection:
         self.y_levels_amount = 10
         self.MIN_LINE_AREA = 500 
-        self.MAX_LINE_AREA = 2500 
+        self.MAX_LINE_AREA = 4000 
 
         # junction parameters:
         self.MIN_JUNCTION_AREA = 20000 #minimale area der junction -> area wird am output bild printed (scaled for 1280x960)
@@ -89,17 +91,17 @@ class LineFollow:
 
         # Junction kernels:
         # Needs to be longer than line width and height to detect junction arms properly
-        self.long_kernel_parameter_junction = 400 # this is the parameter for horizontal and vertical kernel, for junction detection
+        self.long_kernel_parameter_junction = 300 # this is the parameter for horizontal and vertical kernel, for junction detection
 
         #Motor speeds (dont go below 30)
-        self.base_speed_original = 45  # Standartgeschwindigkeit -> Achtung zu hohe Geschwindkeit kann Fehler im Linefollowing verursachen, may get changed due to incline or decline
+        self.base_speed_original = 70  # Standartgeschwindigkeit -> Achtung zu hohe Geschwindkeit kann Fehler im Linefollowing verursachen, may get changed due to incline or decline
         self.junction_speed = 35 # Speed detecting a junction 
         self.max_speed = 100   # Der maximale Speed
         self.min_turn_speed = 60 # Die Geschwindgkeit mit der drehungen mindestens gefahren werden, should be at least 60
         self.max_turn_speed = 100 # adjust in case of overturning
         self.obstacle_approach_speed = 30 # reduced speed when approaching obstacle
-        self.decline_speed = 30 # speed when going down an incline
-        self.incline_speed = 100 # speed when going up an incline
+        self.decline_speed = 35 # speed when going down an incline
+        self.incline_speed = 80 # speed when going up an incline
         self.inner_reduction_ratio = 0.8 # how much the inner wheels are slower
 
         #cropping
@@ -109,10 +111,13 @@ class LineFollow:
         self.right = 250    # Significant side cropping (scaled to new resolution)
 
         #steering parameters
-        self.K_angle = 3 # Einfluss des Winkels auf die Motoransteuerung
-        self.K_offset = 0.5 # Einfluss des offset auf die Motoransteuerung
+        self.K_angle = 4.5 # Einfluss des Winkels auf die Motoransteuerung
+        self.K_offset = 0.4 # Einfluss des offset auf die Motoransteuerung
+        self.steering_amp = 0.5
         self.deadzone_base = 20 # Deadzone for steering control, also Forward() solange unter self.deadzone
         self.min_points = 5 # minimum amout of points, if below it goes forward
+        self.incline_trigger_deg = 10
+        self.obstacle_delay_after_incline_iterations = 12
 
         #─────────────────────────────────────────────────────────────
 
@@ -177,9 +182,6 @@ class LineFollow:
             if cv2.contourArea(cnt) > self.MIN_GREEN_DOT_AREA:
                 self.green_dots.append((cx, cy))
 
-        # Optional overlay (keeps showing filtered count)
-        cv2.putText(self.output_frame, f"green:{len(self.green_dots)}", (8, 22),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2, cv2.LINE_AA)
         
     def get_threshold(self) -> None:
         """Create binary line mask from current frame and suppress green regions."""
@@ -296,11 +298,14 @@ class LineFollow:
             if self.green_dots:
                 dots_below = [dot for dot in self.green_dots if dot[1] > junction_y] 
                 self.filtered_dots = self.helpers.dot_merger_helper(dots_below)
-                if self.debug_draw_filtered_green_dots:
-                    for dot in self.filtered_dots:
-                        cv2.circle(self.output_frame, dot, 5, (255, 0, 0), -1)
             else:
                 self.filtered_dots = []
+
+        if len(self.filtered_dots) > 1:
+            cv2.putText(self.output_frame, f"green:{len(self.filtered_dots)}", (8, 22),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2, cv2.LINE_AA)
+            for dot in self.filtered_dots:
+                        cv2.circle(self.output_frame, dot, 5, (255, 0, 0), -1)
 
         # Store final state
         self.junction_center = junction_center #this is a tuple (x,y) or None
@@ -527,7 +532,7 @@ class LineFollow:
             frame_center_x = self.cropped_width // 2
             avg_offset = np.median(self.cx_list) - frame_center_x
 
-            steering = (K_angle * self.angle_deg) + K_offset * avg_offset
+            steering = ((K_angle * self.angle_deg) + K_offset * avg_offset) * self.steering_amp
             
             print(f"{self.framecount}: follow: angle={self.angle_deg:.2f}°, offset={avg_offset:+.0f}, steering={steering:.2f}")
             
@@ -562,7 +567,7 @@ class LineFollow:
     def process_frame(self) -> None:
         """Process one camera frame and run the complete pipeline."""
 
-        self.obstacle_approaching_flag = self.helpers.obstacle_approaching_helper()
+        obstacle_detected = self.helpers.obstacle_approaching_helper()
 
         self.framecount += 1
 
@@ -578,6 +583,16 @@ class LineFollow:
 
         self.x_rot_unsmoothed = self.sensor.get_x_rotation()
         self.neigung = self.helpers.rotation_helper(self.x_rot_unsmoothed)
+
+        if abs(self.neigung) >= self.incline_trigger_deg:
+            self.iterations_since_incline = 0
+        else:
+            self.iterations_since_incline += 1
+
+        self.obstacle_approaching_flag = (
+            obstacle_detected
+            and self.iterations_since_incline >= self.obstacle_delay_after_incline_iterations
+        )
         
         self.base_speed = self.base_speed_original #always default to original base speed at start
         self.deadzone = self.deadzone_base #always default to original deadzone at start
@@ -644,12 +659,14 @@ if __name__ == "__main__":
     except:
         raise Exception("GPIO setup failed, could not initalize GPIO.BCM mode")
 
-    try:
-        subprocess.run(["bash", "delete.sh"])
-    except:
-        raise Exception("Failed to run delete old images")
+    #try:
+        #subprocess.run(["bash", "delete.sh"])
+    #except:
+        #sraise Exception("Failed to run delete old images")
 
     line_follower = LineFollow()
+    line_follower.motor.forward(75)
+    time.sleep(0.5)
     try:
         while True:
             line_follower.process_frame()

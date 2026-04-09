@@ -42,7 +42,7 @@ class save_img_and_stream:
             if kwargs.get('IP', None) is not None:
                 self.server_host = kwargs.get('IP')
             else:
-                self.server_host = "krasser-laptop.lan"  # default to a default hostname
+                self.server_host = "10.70.66.186"  # default to a default hostname
             self.streaming = True
         else:
             # Stream not enabled, save locally
